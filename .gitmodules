@@ -1,0 +1,6 @@
+[submodule "debian-rfs-builder"]
+	path = debian-rfs-builder
+	url = git@github.com:perehinik/debian-rfs-builder.git
+[submodule "rpi-zero-2w-linux"]
+	path = rpi-zero-2w-linux
+	url = git@github.com:perehinik/rpi-zero-2w-linux.git
