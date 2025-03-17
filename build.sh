@@ -24,10 +24,11 @@ cp -r -a ./${KERNEL_SRC_DIR}/dist/* "${BUILD_DIR}"
 
 # Build rfs
 echo;echo;echo "===  BUILD ROOTFS  ===";echo;
+CUSTOM_STEPS_DIR="${PWD}/custom_steps"
 cd ./${ROOTFS_SRC_DIR}
-./build.sh
+./build.sh -v xfce -d ${CUSTOM_STEPS_DIR}
 cd ..
-cp ./${ROOTFS_SRC_DIR}/dist/* "${BUILD_DIR}"
+cp ./${ROOTFS_SRC_DIR}/dist/rootfs-*-xfce.img "${BUILD_DIR}/rootfs.img"
 
 echo;echo;echo "===  BUILD IMAGE  ===";echo;
 echo "Create ${IMAGE_SIZE} sparse image file ${IMAGE_NAME} ..."
@@ -63,6 +64,7 @@ mount -o loop ${LOOP_DEVICE_RFS} ${BUILD_DIR}/rootfs
 echo "Copy files...";
 cp -a ${BUILD_DIR}/rootfs/. "${BUILD_DIR}/rootfs_rpi/"
 cp -a ${BUILD_DIR}/lib/. "${BUILD_DIR}/rootfs_rpi/lib"
+cp -r ./src/rootfs/* "${BUILD_DIR}/rootfs_rpi"
 
 cp -r ${BUILD_DIR}/boot/* "${BUILD_DIR}/bootfs_rpi"
 cp -r ./src/bootfs/* "${BUILD_DIR}/bootfs_rpi"
