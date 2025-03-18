@@ -6,10 +6,6 @@ IMAGE_NAME="rpi-zero-2w.img"
 IMAGE_SIZE="8G"
 BUILD_DIR="/tmp/rpi-image-build"
 
-echo;echo;echo "===  PULL SUBMODULES  ===";echo;
-git submodule init
-git submodule update
-
 rm -rf ./dist
 mkdir ./dist
 rm -rf "${BUILD_DIR}"
@@ -18,15 +14,15 @@ mkdir -p "${BUILD_DIR}"
 # Build kernel
 echo;echo;echo "===  BUILD KERNEL  ===";echo;
 cd ./${KERNEL_SRC_DIR}
-./build-in-docker.sh
+#./build.sh
 cd ..
 cp -r -a ./${KERNEL_SRC_DIR}/dist/* "${BUILD_DIR}"
 
 # Build rfs
 echo;echo;echo "===  BUILD ROOTFS  ===";echo;
-CUSTOM_STEPS_DIR="${PWD}/custom_steps"
+POSTINST_SCRIPT="${PWD}/postinst/postinst.sh"
 cd ./${ROOTFS_SRC_DIR}
-./build.sh -v xfce -d ${CUSTOM_STEPS_DIR}
+#./build.sh -v xfce -x ${POSTINST_SCRIPT}
 cd ..
 cp ./${ROOTFS_SRC_DIR}/dist/rootfs-*-xfce.img "${BUILD_DIR}/rootfs.img"
 
