@@ -9,11 +9,20 @@ echo "root:root" | /sbin/chpasswd
 apt-get update
 apt-get install -y vim htop
 
+# Install systemd
+apt-get install -y systemd systemd-sysv
+
 # Create swap file
-fallocate -l 2G /swapfile
-dd if=/dev/zero of=/swapfile bs=1M count=2048 status=progress
+fallocate -l 1G /swapfile
+dd if=/dev/zero of=/swapfile bs=1M count=1024 status=progress
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
 # swapfile should be also added to fstab
 # /dev/sdXn none swap sw 0 0
+
+# Cleanup
+apt-get remove -y avahi-daemon
+apt-get remove -y nano
+apt-get autoremove -y
+apt-get clean

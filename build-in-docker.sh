@@ -10,5 +10,5 @@ docker run -it \
         -w /root \
         -u root \
         --entrypoint ./build.sh \
-        ${DOCKER_IMAGE}
-
+        ${DOCKER_IMAGE} \
+	"$@"

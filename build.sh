@@ -2,38 +2,109 @@
 
 ROOTFS_SRC_DIR=debian-rfs-builder
 KERNEL_SRC_DIR=rpi-zero-2w-linux
-IMAGE_NAME="rpi-zero-2w.img"
-IMAGE_SIZE="8G"
+IMAGE_VERSION="xfce"
+IMAGE_SIZE="8GB"
 BUILD_DIR="/tmp/rpi-image-build"
+BUILD_ALL=1
+BUILD_KERNEL=0
+BUILD_ROOTFS=0
+BUILD_IMAGE=0
 
-rm -rf ./dist
-mkdir ./dist
+# Function to display help message
+show_help() {
+    echo "Usage: $(basename "$0") [-v <version> ]"
+    echo ""
+    echo "Options:"
+    echo " -v <version>  minimal | xfce"
+    echo " -k            Build kernel"
+    echo " -r            Build rootfs"
+    echo " -i            Build image"
+    echo " -h            Show this help message."
+}
+
+# Parse options
+while getopts "v:krih" opt; do
+    case $opt in
+        v)
+            IMAGE_VERSION=$OPTARG
+	    ;;
+	k)
+	    BUILD_KERNEL=1
+	    BUILD_ALL=0
+	    ;;
+	r)
+	    BUILD_ROOTFS=1
+	    BUILD_ALL=0
+	    ;;
+	i)
+	    BUILD_IMAGE=1
+	    BUILD_ALL=0
+	    ;;
+        h)
+            show_help
+            exit 0
+            ;;
+        \?)
+            show_help
+            exit 1
+            ;;
+        :)
+            echo "Option -$OPTARG requires an argument." >&2
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+if [ "${IMAGE_VERSION}" = "xfce" ]; then
+     IMAGE_NAME="rpi-zero-2w-bookworm-xfce.img"
+     POSTINST_SCRIPT="${PWD}/postinst/postinst-xfce.sh"
+elif [ "${IMAGE_VERSION}" = "minimal" ]; then
+     IMAGE_NAME="rpi-zero-2w-bookworm-minimal.img"
+     POSTINST_SCRIPT="${PWD}/postinst/postinst-minimal.sh"
+else
+     echo "Wrong version ${IMAGE_VERSION}"
+     exit 1
+fi
+
+if [ "${BUILD_KERNEL}" = "1" ] || [ "${BUILD_ALL}" = "1" ]; then
+    # Build kernel
+    echo;echo;echo "===  BUILD KERNEL  ===";echo;
+    cd ./${KERNEL_SRC_DIR}
+    ./build.sh
+    cd ..
+fi
+
+if [ "${BUILD_ROOTFS}" = "1" ] || [ "${BUILD_ALL}" = "1" ]; then
+    # Build rfs
+    echo;echo;echo "===  BUILD ROOTFS  ===";echo;
+    cd ./${ROOTFS_SRC_DIR}
+    ./build.sh -v minimal -x ${POSTINST_SCRIPT}
+    cd ..
+fi
+
+if [ "${BUILD_IMAGE}" = "0" ] && [ "${BUILD_ALL}" = "0" ]; then
+    exit 0
+fi
+
+echo;echo;echo "===  BUILD IMAGE  ===";echo;
+# Create directories
+mkdir -p ./dist
+rm -f ./dist/${IMAGE_NAME}
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 
-# Build kernel
-echo;echo;echo "===  BUILD KERNEL  ===";echo;
-cd ./${KERNEL_SRC_DIR}
-#./build.sh
-cd ..
+# Copy kernel and rootfs
 cp -r -a ./${KERNEL_SRC_DIR}/dist/* "${BUILD_DIR}"
+cp ./${ROOTFS_SRC_DIR}/dist/rootfs-*.img "${BUILD_DIR}/rootfs.img"
 
-# Build rfs
-echo;echo;echo "===  BUILD ROOTFS  ===";echo;
-POSTINST_SCRIPT="${PWD}/postinst/postinst.sh"
-cd ./${ROOTFS_SRC_DIR}
-#./build.sh -v xfce -x ${POSTINST_SCRIPT}
-cd ..
-cp ./${ROOTFS_SRC_DIR}/dist/rootfs-*-xfce.img "${BUILD_DIR}/rootfs.img"
-
-echo;echo;echo "===  BUILD IMAGE  ===";echo;
 echo "Create ${IMAGE_SIZE} sparse image file ${IMAGE_NAME} ..."
 losetup -D
 dd if=/dev/zero of="${BUILD_DIR}/${IMAGE_NAME}" bs=1 count=0 seek=${IMAGE_SIZE}
 parted "${BUILD_DIR}/${IMAGE_NAME}" --script \
     mklabel msdos \
-    mkpart primary 4MiB 504MiB \
-    mkpart primary 504MiB 100%
+    mkpart primary 4MB 512MB \
+    mkpart primary 512MB 100%
 LOOP_DEVICE_RPI=$(losetup -fP "${BUILD_DIR}/${IMAGE_NAME}" --show)
 
 echo "Format partitions..."
