@@ -21,6 +21,9 @@ swapon /swapfile
 # swapfile should be also added to fstab
 # /dev/sdXn none swap sw 0 0
 
+# Packages for proper mount of /boot using /etc/fstab
+apt-get install -y kmod dosfstools udisks2
+
 # Cleanup
 apt-get remove -y avahi-daemon
 apt-get remove -y nano
