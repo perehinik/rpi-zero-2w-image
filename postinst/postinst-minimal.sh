@@ -24,6 +24,10 @@ swapon /swapfile
 # Packages for proper mount of /boot using /etc/fstab
 apt-get install -y kmod dosfstools udisks2
 
+apt-get install -y net-tools wpasupplicant ifupdown iputils-ping
+
+apt-get install -y wpasupplicant wireless-regdb
+
 # Cleanup
 apt-get remove -y avahi-daemon
 apt-get remove -y nano

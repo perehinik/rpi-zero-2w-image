@@ -28,6 +28,8 @@ swapon /swapfile
 # swapfile should be also added to fstab
 # /dev/sdXn none swap sw 0 0
 
+apt-get install -y wpasupplicant wireless-regdb iputils-ping
+
 # Cleanup
 apt-get remove -y avahi-daemon
 apt-get remove -y nano
