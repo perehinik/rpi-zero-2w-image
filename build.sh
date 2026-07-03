@@ -56,16 +56,8 @@ while getopts "v:krih" opt; do
     esac
 done
 
-if [ "${IMAGE_VERSION}" = "xfce" ]; then
-     IMAGE_NAME="rpi-zero-2w-bookworm-xfce.img"
-     POSTINST_SCRIPT="${PWD}/postinst/postinst-xfce.sh"
-elif [ "${IMAGE_VERSION}" = "minimal" ]; then
-     IMAGE_NAME="rpi-zero-2w-bookworm-minimal.img"
-     POSTINST_SCRIPT="${PWD}/postinst/postinst-minimal.sh"
-else
-     echo "Wrong version ${IMAGE_VERSION}"
-     exit 1
-fi
+IMAGE_NAME="rpi-zero-2w-bookworm-${IMAGE_VERSION}.img"
+POSTINST_SCRIPT="${PWD}/postinst/postinst-${IMAGE_VERSION}.sh"
 
 if [ "${BUILD_KERNEL}" = "1" ] || [ "${BUILD_ALL}" = "1" ]; then
     # Build kernel
@@ -78,6 +70,8 @@ fi
 if [ "${BUILD_ROOTFS}" = "1" ] || [ "${BUILD_ALL}" = "1" ]; then
     # Build rfs
     echo;echo;echo "===  BUILD ROOTFS  ===";echo;
+    date "+%Y-%m-%d %H:%M:%S" > ./postinst/saved-date.txt
+    chmod 666 ./postinst/saved-date.txt
     cd ./${ROOTFS_SRC_DIR}
     ./build.sh -v minimal -x ${POSTINST_SCRIPT}
     cd ..
@@ -131,10 +125,10 @@ mount -o loop ${LOOP_DEVICE_RFS} ${BUILD_DIR}/rootfs
 echo "Copy files...";
 cp -a ${BUILD_DIR}/rootfs/. "${BUILD_DIR}/rootfs_rpi/"
 cp -a ${BUILD_DIR}/lib/. "${BUILD_DIR}/rootfs_rpi/lib"
-cp -r ./src/rootfs/* "${BUILD_DIR}/rootfs_rpi"
+cp -ra ./src/rootfs/* "${BUILD_DIR}/rootfs_rpi"
 
-cp -r ${BUILD_DIR}/boot/* "${BUILD_DIR}/bootfs_rpi"
-cp -r ./src/bootfs/* "${BUILD_DIR}/bootfs_rpi"
+cp -ra ${BUILD_DIR}/boot/* "${BUILD_DIR}/bootfs_rpi"
+cp -ra ./src/bootfs/* "${BUILD_DIR}/bootfs_rpi"
 sync
 echo;echo "bootfs:"
 echo "$(ls -l "${BUILD_DIR}/bootfs_rpi")"
