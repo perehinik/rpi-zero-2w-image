@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 ROOTFS_SRC_DIR=debian-rfs-builder
 KERNEL_SRC_DIR=rpi-zero-2w-linux
