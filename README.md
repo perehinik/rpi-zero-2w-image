@@ -2,20 +2,19 @@
 
 To build image in docker run:
 ```shell
-./build-in-docker.sh -v minimal
-```
-or
-```shell
-./build-in-docker.sh -v xfce
+./build.sh -d -n air-quality
 ```
 
 Images can be found in `dist` directory.
 
 You can also build in your local environment by running:
 ```shell
-./build.sh -v minimal
+./build.sh -n air-quality
 ```
-or
-```shell
-./build.sh -v xfce
+
+To install image to SD card run
 ```
+xzcat dist/rpi-zero-2w-bookworm-minimal-air-quality.img.xz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
+```
+
+Change `/dev/sdX` to your SD card device 

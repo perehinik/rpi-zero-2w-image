@@ -3,44 +3,57 @@ set -e
 
 ROOTFS_SRC_DIR=debian-rfs-builder
 KERNEL_SRC_DIR=rpi-zero-2w-linux
-IMAGE_VERSION="xfce"
 IMAGE_SIZE="8GB"
-BUILD_DIR="/tmp/rpi-image-build"
+BUILD_DIR="./rpi-image-build"
 BUILD_ALL=1
 BUILD_KERNEL=0
 BUILD_ROOTFS=0
 BUILD_IMAGE=0
+DOCKER_OPTIONS=""
+DOCKER_IMAGE="perehiniak/linux-build-tools:1.0.1"
+RECIPE_NAME=""
+
+print_step() {
+    echo
+    echo
+    echo "=== $1 ==="
+    echo
+}
 
 # Function to display help message
 show_help() {
-    echo "Usage: $(basename "$0") [-v <version> ]"
+    echo "Usage: $(basename "$0") -n <recipe name> [ -d ] [ -kri ] [-v <version> ]"
     echo ""
     echo "Options:"
-    echo " -v <version>  minimal | xfce"
-    echo " -k            Build kernel"
-    echo " -r            Build rootfs"
-    echo " -i            Build image"
-    echo " -h            Show this help message."
+    echo " -n <recipe name>   Recipe name, all recipe files should be in recipe-<recipe name> dir"
+    echo " -k                 Build kernel"
+    echo " -r                 Build rootfs"
+    echo " -i                 Build image"
+    echo " -d                 Run inside Docker."
+    echo " -h                 Show this help message."
 }
 
 # Parse options
-while getopts "v:krih" opt; do
+while getopts "v:n:kridh" opt; do
     case $opt in
-        v)
-            IMAGE_VERSION=$OPTARG
-	    ;;
-	k)
-	    BUILD_KERNEL=1
-	    BUILD_ALL=0
-	    ;;
-	r)
-	    BUILD_ROOTFS=1
-	    BUILD_ALL=0
-	    ;;
-	i)
-	    BUILD_IMAGE=1
-	    BUILD_ALL=0
-	    ;;
+        n)
+            RECIPE_NAME=$OPTARG
+	        ;;
+        k)
+            BUILD_KERNEL=1
+            BUILD_ALL=0
+            ;;
+        r)
+            BUILD_ROOTFS=1
+            BUILD_ALL=0
+            ;;
+        i)
+            BUILD_IMAGE=1
+            BUILD_ALL=0
+            ;;
+        d)
+            DOCKER_OPTIONS="-d"
+            ;;
         h)
             show_help
             exit 0
@@ -57,24 +70,26 @@ while getopts "v:krih" opt; do
     esac
 done
 
-IMAGE_NAME="rpi-zero-2w-bookworm-${IMAGE_VERSION}.img"
-POSTINST_SCRIPT="${PWD}/postinst/postinst-${IMAGE_VERSION}.sh"
+print_step "GET RECIPE ${RECIPE_NAME}"
+source ./recipes/${RECIPE_NAME}
 
-if [ "${BUILD_KERNEL}" = "1" ] || [ "${BUILD_ALL}" = "1" ]; then
+IMAGE_NAME="rpi-zero-2w-bookworm-${IMAGE_VERSION}-${RECIPE_NAME}.img"
+
+# No need to run in Docker, as it already built at that point
+if [ "${BUILD_KERNEL}" = "1" ] || [ "${BUILD_ALL}" = "1" ] && [ -z "${INSIDE_DOCKER:-}" ]; then
     # Build kernel
-    echo;echo;echo "===  BUILD KERNEL  ===";echo;
+    print_step "BUILD KERNEL"
     cd ./${KERNEL_SRC_DIR}
-    ./build.sh
+    ./build.sh "${DOCKER_OPTIONS}"
     cd ..
 fi
 
-if [ "${BUILD_ROOTFS}" = "1" ] || [ "${BUILD_ALL}" = "1" ]; then
+# No need to run in Docker, as it already built at that point
+if [ "${BUILD_ROOTFS}" = "1" ] || [ "${BUILD_ALL}" = "1" ] && [ -z "${INSIDE_DOCKER:-}" ]; then
     # Build rfs
-    echo;echo;echo "===  BUILD ROOTFS  ===";echo;
-    date "+%Y-%m-%d %H:%M:%S" > ./postinst/saved-date.txt
-    chmod 666 ./postinst/saved-date.txt
+    print_step "BUILD ROOTFS"
     cd ./${ROOTFS_SRC_DIR}
-    ./build.sh -v minimal -x ${POSTINST_SCRIPT}
+    ./build.sh -v ${IMAGE_VERSION} "${DOCKER_OPTIONS}"
     cd ..
 fi
 
@@ -82,19 +97,58 @@ if [ "${BUILD_IMAGE}" = "0" ] && [ "${BUILD_ALL}" = "0" ]; then
     exit 0
 fi
 
-echo;echo;echo "===  BUILD IMAGE  ===";echo;
-# Create directories
-mkdir -p ./dist
-rm -f ./dist/${IMAGE_NAME}
-rm -rf "${BUILD_DIR}"
-mkdir -p "${BUILD_DIR}"
+# Do this only outside docker and just mount build dit in docker.
+if [ -z "${INSIDE_DOCKER:-}" ]; then
+    print_step "BUILD IMAGE"
+    # Create directories
+    mkdir -p ./dist
+    rm -f ./dist/${IMAGE_NAME}
+    rm -rf "${BUILD_DIR}"
+    mkdir -p "${BUILD_DIR}"
 
-# Copy kernel and rootfs
-cp -r -a ./${KERNEL_SRC_DIR}/dist/* "${BUILD_DIR}"
-cp ./${ROOTFS_SRC_DIR}/dist/rootfs-*.img "${BUILD_DIR}/rootfs.img"
+    print_step "COPY FILES"
+    cp -r -a ./${KERNEL_SRC_DIR}/dist/* "${BUILD_DIR}"
+    cp ./${ROOTFS_SRC_DIR}/dist/rootfs-bookworm-${IMAGE_VERSION}.img "${BUILD_DIR}/rootfs.img"
+    sync
+    ls ${BUILD_DIR}
+
+
+    print_step "APPLY RECIPE ${RECIPE_NAME} RFS mods"
+    for IM_INGREDIENT in "${IMAGE_INGREDIENTS[@]}"; do
+        INGR_DIR="./src/${IM_INGREDIENT}"
+        if [ ! -d "${INGR_DIR}" ]; then
+            echo "ERROR: INGREDIENT not found: ${INGR_DIR}" >&2
+            exit 1
+        fi
+        
+        if [ -d "${INGR_DIR}/rfs-mod" ]; then
+            print_step "APPLY INGREDIENT RFS mod ${IM_INGREDIENT}"
+            ./debian-rfs-builder/run-in-image-ssh.sh "${DOCKER_OPTIONS}" \
+                        -i "${BUILD_DIR}/rootfs.img" \
+                        -s "${INGR_DIR}/rfs-mod/run.sh" \
+                        -c "${INGR_DIR}/rfs-mod"
+        fi
+    done
+fi
+
+# If we use Docker everything from this point should be done there
+if [ DOCKER_OPTIONS != "" ] && [ -z "${INSIDE_DOCKER:-}" ]; then
+    print_step "START DOCKER"
+    exec docker run -it \
+        --rm \
+	    --privileged \
+        -e INSIDE_DOCKER=1 \
+        -v ./:/root \
+	    -v /dev:/dev \
+        -w /root \
+        -u root \
+        --entrypoint "$0" \
+        ${DOCKER_IMAGE} \
+	    "$@"
+fi
 
 echo "Create ${IMAGE_SIZE} sparse image file ${IMAGE_NAME} ..."
-losetup -D
+losetup -D || true
 dd if=/dev/zero of="${BUILD_DIR}/${IMAGE_NAME}" bs=1 count=0 seek=${IMAGE_SIZE}
 parted "${BUILD_DIR}/${IMAGE_NAME}" --script \
     mklabel msdos \
@@ -114,29 +168,48 @@ echo -e "t\n1\n0x0c\nw\n" | fdisk "${LOOP_DEVICE_RPI}"
 echo -e "i\n1\nq\n" | fdisk "${LOOP_DEVICE_RPI}"
 
 echo "Mount rootfs and rpi image..."
-mkdir "${BUILD_DIR}/bootfs_rpi"
-mkdir "${BUILD_DIR}/rootfs_rpi"
+mkdir -p "${BUILD_DIR}/bootfs_rpi"
+mkdir -p "${BUILD_DIR}/rootfs_rpi"
 mount -o loop "${LOOP_DEVICE_RPI}p1" "${BUILD_DIR}/bootfs_rpi"
 mount -o loop "${LOOP_DEVICE_RPI}p2" "${BUILD_DIR}/rootfs_rpi"
 
-mkdir "${BUILD_DIR}/rootfs"
+mkdir -p "${BUILD_DIR}/rootfs"
 LOOP_DEVICE_RFS=$(losetup -f "${BUILD_DIR}/rootfs.img" --show)
 mount -o loop ${LOOP_DEVICE_RFS} ${BUILD_DIR}/rootfs
 
 echo "Copy files...";
 cp -a ${BUILD_DIR}/rootfs/. "${BUILD_DIR}/rootfs_rpi/"
 cp -a ${BUILD_DIR}/lib/. "${BUILD_DIR}/rootfs_rpi/lib"
-cp -ra ./src/rootfs/* "${BUILD_DIR}/rootfs_rpi"
+cp -r ${BUILD_DIR}/boot/* "${BUILD_DIR}/bootfs_rpi"
 
-cp -ra ${BUILD_DIR}/boot/* "${BUILD_DIR}/bootfs_rpi"
-cp -ra ./src/bootfs/* "${BUILD_DIR}/bootfs_rpi"
+print_step "APPLY RECIPE ${RECIPE_NAME} STATIC FILES"
+for IM_INGREDIENT in "${IMAGE_INGREDIENTS[@]}"; do
+    INGR_DIR="./src/${IM_INGREDIENT}"
+    if [ ! -d "${INGR_DIR}" ]; then
+        echo "ERROR: INGREDIENT not found: ${INGR_DIR}" >&2
+        exit 1
+    fi
+    
+    if [ -d "${INGR_DIR}/static/rootfs" ]; then
+        print_step "APPLY INGREDIENT RootFS static ${IM_INGREDIENT}"
+        
+        cp -ra "${INGR_DIR}/static/rootfs/." "${BUILD_DIR}/rootfs_rpi"
+    fi
+
+    if [ -d "${INGR_DIR}/static/bootfs" ]; then
+        print_step "APPLY INGREDIENT BootFS static ${IM_INGREDIENT}"
+        
+        cp -r "${INGR_DIR}/static/bootfs/." "${BUILD_DIR}/bootfs_rpi"
+    fi
+done
+
 sync
 echo;echo "bootfs:"
 echo "$(ls -l "${BUILD_DIR}/bootfs_rpi")"
 echo;echo "rootfs:"
 echo "$(ls -l "${BUILD_DIR}/rootfs_rpi")"
 
-echo;echo;echo "===  CLEANUP  ===";echo;
+print_step "CLEANUP"
 umount "${BUILD_DIR}/rootfs_rpi"
 umount "${BUILD_DIR}/bootfs_rpi"
 umount "${BUILD_DIR}/rootfs"
