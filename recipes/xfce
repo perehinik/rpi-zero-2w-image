@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    echo "This script must be sourced, not executed."
+    echo "Use:"
+    echo "    source $(basename "$0")"
+    exit 1
+fi
+
+IMAGE_VERSION="xfce"
+
+IMAGE_INGREDIENTS=(
+    "bootloader-basic"
+    "firmware-wifi"
+    "config-basic"
+    "pi-user-minimal"
+)
