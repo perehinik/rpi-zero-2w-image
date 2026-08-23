@@ -121,6 +121,14 @@ if [ -z "${INSIDE_DOCKER:-}" ]; then
             exit 1
         fi
         
+        BUILD_SCRIPT="${INGR_DIR}/build.sh"
+        if [ -f "${BUILD_SCRIPT}" ]; then
+            print_step "BUILD INGREDIENT ${IM_INGREDIENT}"
+            pushd "${INGR_DIR}" > /dev/null
+            ./build.sh
+            popd > /dev/null
+        fi
+
         if [ -d "${INGR_DIR}/rfs-mod" ]; then
             print_step "APPLY INGREDIENT RFS mod ${IM_INGREDIENT}"
             ./debian-rfs-builder/run-in-image-ssh.sh "${DOCKER_OPTIONS}" \
@@ -129,6 +137,10 @@ if [ -z "${INSIDE_DOCKER:-}" ]; then
                         -c "${INGR_DIR}/rfs-mod"
         fi
     done
+
+    ./debian-rfs-builder/run-in-image-init.sh "${DOCKER_OPTIONS}" \
+                        -i "${BUILD_DIR}/rootfs.img" \
+                        -s "debian-rfs-builder/aarch64-${IMAGE_VERSION}/remove-qemu-env.sh"
 fi
 
 # If we use Docker everything from this point should be done there
